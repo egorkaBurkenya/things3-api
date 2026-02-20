@@ -418,8 +418,7 @@ func CreateTask(req models.CreateTaskRequest) (*models.Task, error) {
 	// Move to area if specified (and no project given, since project takes precedence).
 	if req.Area != "" && req.Project == "" {
 		scriptParts = append(scriptParts,
-			fmt.Sprintf(`	set a to first area whose name is "%s"`, EscapeString(req.Area)),
-			`	move newTask to a`,
+			fmt.Sprintf(`	set area of newTask to first area whose name is "%s"`, EscapeString(req.Area)),
 		)
 	}
 
