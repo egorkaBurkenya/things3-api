@@ -7,10 +7,11 @@ import (
 )
 
 type Config struct {
-	Token    string
-	Port     string
-	Host     string
-	LogLevel string
+	Token         string
+	Port          string
+	Host          string
+	LogLevel      string
+	ThingsURLToken string
 }
 
 func Load() (*Config, error) {
@@ -36,11 +37,14 @@ func Load() (*Config, error) {
 		logLevel = "info"
 	}
 
+	thingsURLToken := os.Getenv("THINGS_URL_TOKEN")
+
 	return &Config{
-		Token:    token,
-		Port:     port,
-		Host:     host,
-		LogLevel: logLevel,
+		Token:          token,
+		Port:           port,
+		Host:           host,
+		LogLevel:       logLevel,
+		ThingsURLToken: thingsURLToken,
 	}, nil
 }
 

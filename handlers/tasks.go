@@ -3,9 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/egorkaBurkenya/things3-api/applescript"
+	"github.com/egorkaBurkenya/things3-api/database"
 	"github.com/egorkaBurkenya/things3-api/models"
 )
 
@@ -54,7 +57,7 @@ func TasksRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		getSomedayTasks(w, r)
 	default:
-		// /tasks/{id} or /tasks/{id}/complete or /tasks/{id}/cancel
+		// /tasks/{id} or /tasks/{id}/complete or /tasks/{id}/cancel or /tasks/{id}/checklist/...
 		id := extractID(path, "/tasks/")
 		suffix := pathSuffix(path, "/tasks/")
 
@@ -63,6 +66,26 @@ func TasksRouter(w http.ResponseWriter, r *http.Request) {
 			completeTask(w, r, id)
 		case suffix == "/cancel" && r.Method == http.MethodPost:
 			cancelTask(w, r, id)
+		case suffix == "/checklist" || suffix == "/checklist/":
+			switch r.Method {
+			case http.MethodGet:
+				getChecklistItems(w, r, id)
+			case http.MethodPost:
+				addChecklistItem(w, r, id)
+			default:
+				methodNotAllowed(w)
+			}
+		case strings.HasPrefix(suffix, "/checklist/"):
+			itemID := strings.TrimPrefix(suffix, "/checklist/")
+			itemID = strings.TrimSuffix(itemID, "/")
+			switch r.Method {
+			case http.MethodPatch:
+				updateChecklistItem(w, r, id, itemID)
+			case http.MethodDelete:
+				deleteChecklistItem(w, r, id, itemID)
+			default:
+				methodNotAllowed(w)
+			}
 		case suffix == "" && r.Method == http.MethodGet:
 			getTaskByID(w, r, id)
 		case suffix == "" && r.Method == http.MethodPatch:
@@ -174,6 +197,27 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.ChecklistItems) > 0 {
+		// Use URL scheme to create task with checklist items (AppleScript can't do checklists).
+		taskID, err := database.CreateTaskWithChecklist(
+			req.Title, req.ChecklistItems,
+			req.Notes, req.Project, req.Area, req.Due, req.When, req.Tags,
+		)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		task, err := applescript.GetTaskByID(taskID)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		items, _ := database.GetChecklistItems(taskID)
+		task.ChecklistItems = items
+		writeJSON(w, http.StatusCreated, task)
+		return
+	}
+
 	task, err := applescript.CreateTask(req)
 	if err != nil {
 		internalError(w, err)
@@ -256,6 +300,114 @@ func deleteTask(w http.ResponseWriter, _ *http.Request, id string) {
 			writeError(w, http.StatusNotFound, "task not found")
 			return
 		}
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func getChecklistItems(w http.ResponseWriter, _ *http.Request, taskID string) {
+	if err := models.ValidateThingsID(taskID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task id")
+		return
+	}
+
+	items, err := database.GetChecklistItems(taskID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func addChecklistItem(w http.ResponseWriter, r *http.Request, taskID string) {
+	if err := models.ValidateThingsID(taskID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task id")
+		return
+	}
+
+	var req models.CreateChecklistItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Try URL scheme (shows in Things UI immediately) if auth token is available.
+	authToken := os.Getenv("THINGS_URL_TOKEN")
+	if authToken != "" {
+		if err := database.AddChecklistItem(taskID, req.Title, authToken); err != nil {
+			internalError(w, err)
+			return
+		}
+		// Wait briefly for Things to process, then read back from DB.
+		time.Sleep(500 * time.Millisecond)
+		items, _ := database.GetChecklistItems(taskID)
+		if len(items) > 0 {
+			writeJSON(w, http.StatusCreated, items[len(items)-1])
+			return
+		}
+		writeJSON(w, http.StatusCreated, models.ChecklistItem{Title: req.Title})
+		return
+	}
+
+	// Fallback: direct SQLite insert (readable via API but may not show in Things UI).
+	item, err := database.AddChecklistItemDirect(taskID, req)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func updateChecklistItem(w http.ResponseWriter, r *http.Request, taskID, itemID string) {
+	if err := models.ValidateThingsID(taskID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	if err := models.ValidateThingsID(itemID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid checklist item id")
+		return
+	}
+
+	var req models.UpdateChecklistItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	item, err := database.UpdateChecklistItem(taskID, itemID, req)
+	if err != nil {
+		if isNotFound(err) {
+			writeError(w, http.StatusNotFound, "checklist item not found")
+			return
+		}
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func deleteChecklistItem(w http.ResponseWriter, _ *http.Request, taskID, itemID string) {
+	if err := models.ValidateThingsID(taskID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	if err := models.ValidateThingsID(itemID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid checklist item id")
+		return
+	}
+
+	if err := database.DeleteChecklistItem(taskID, itemID); err != nil {
 		internalError(w, err)
 		return
 	}

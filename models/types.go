@@ -7,26 +7,34 @@ import (
 )
 
 type Task struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Notes     string   `json:"notes,omitempty"`
-	Status    string   `json:"status"`
-	Project   string   `json:"project,omitempty"`
-	Area      string   `json:"area,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
-	Due       string   `json:"due,omitempty"`
-	When      string   `json:"when,omitempty"`
-	CreatedAt string   `json:"created_at,omitempty"`
+	ID             string          `json:"id"`
+	Title          string          `json:"title"`
+	Notes          string          `json:"notes,omitempty"`
+	Status         string          `json:"status"`
+	Project        string          `json:"project,omitempty"`
+	Area           string          `json:"area,omitempty"`
+	Tags           []string        `json:"tags,omitempty"`
+	Due            string          `json:"due,omitempty"`
+	When           string          `json:"when,omitempty"`
+	CreatedAt      string          `json:"created_at,omitempty"`
+	ChecklistItems []ChecklistItem `json:"checklist_items,omitempty"`
+}
+
+type ChecklistItem struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Completed bool   `json:"completed"`
 }
 
 type CreateTaskRequest struct {
-	Title   string   `json:"title"`
-	Notes   string   `json:"notes"`
-	Project string   `json:"project"`
-	Area    string   `json:"area"`
-	Due     string   `json:"due"`
-	When    string   `json:"when"`
-	Tags    []string `json:"tags"`
+	Title          string   `json:"title"`
+	Notes          string   `json:"notes"`
+	Project        string   `json:"project"`
+	Area           string   `json:"area"`
+	Due            string   `json:"due"`
+	When           string   `json:"when"`
+	Tags           []string `json:"tags"`
+	ChecklistItems []string `json:"checklistItems"`
 }
 
 func (r *CreateTaskRequest) Validate() error {
@@ -60,6 +68,17 @@ func (r *CreateTaskRequest) Validate() error {
 	}
 	if len(r.Area) > 500 {
 		return fmt.Errorf("area name must be under 500 characters")
+	}
+	if len(r.ChecklistItems) > 100 {
+		return fmt.Errorf("maximum 100 checklist items allowed")
+	}
+	for _, item := range r.ChecklistItems {
+		if item == "" {
+			return fmt.Errorf("checklist item title cannot be empty")
+		}
+		if len(item) > 1000 {
+			return fmt.Errorf("checklist item title must be under 1000 characters")
+		}
 	}
 	return nil
 }
@@ -203,6 +222,40 @@ func (r *UpdateAreaRequest) Validate() error {
 		if len(*r.Name) > 500 {
 			return fmt.Errorf("name must be under 500 characters")
 		}
+	}
+	return nil
+}
+
+type CreateChecklistItemRequest struct {
+	Title string `json:"title"`
+}
+
+func (r *CreateChecklistItemRequest) Validate() error {
+	if r.Title == "" {
+		return fmt.Errorf("title is required")
+	}
+	if len(r.Title) > 1000 {
+		return fmt.Errorf("title must be under 1000 characters")
+	}
+	return nil
+}
+
+type UpdateChecklistItemRequest struct {
+	Title     *string `json:"title"`
+	Completed *bool   `json:"completed"`
+}
+
+func (r *UpdateChecklistItemRequest) Validate() error {
+	if r.Title != nil {
+		if *r.Title == "" {
+			return fmt.Errorf("title cannot be empty")
+		}
+		if len(*r.Title) > 1000 {
+			return fmt.Errorf("title must be under 1000 characters")
+		}
+	}
+	if r.Title == nil && r.Completed == nil {
+		return fmt.Errorf("at least one field (title or completed) is required")
 	}
 	return nil
 }
