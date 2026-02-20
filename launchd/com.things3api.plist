@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.things3api</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/things3-api</string>
+	</array>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>THINGS_API_TOKEN</key>
+		<string>your-secret-token-here</string>
+		<key>THINGS_API_PORT</key>
+		<string>7420</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>/tmp/things3-api.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/tmp/things3-api.err</string>
+</dict>
+</plist>
