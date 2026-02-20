@@ -179,8 +179,9 @@ func GetFilteredTasks(project, area, tag string) ([]models.Task, error) {
 
 	switch {
 	case project != "":
+		findScript := FindByNameScript("project", "proj", project)
 		script = fmt.Sprintf(`tell application "Things3"
-	set proj to first project whose name is "%s"
+%s
 	set taskList to to dos of proj
 	set output to ""
 	repeat with t in taskList
@@ -211,11 +212,12 @@ func GetFilteredTasks(project, area, tag string) ([]models.Task, error) {
 		set output to output & taskId & tab & taskName & tab & taskNotes & tab & (taskStatus as string) & tab & projName & tab & areaName & tab & tagList & tab & dueVal & tab & createdVal & linefeed
 	end repeat
 	return output
-end tell`, EscapeString(project))
+end tell`, findScript)
 
 	case area != "":
+		findScript := FindByNameScript("area", "a", area)
 		script = fmt.Sprintf(`tell application "Things3"
-	set a to first area whose name is "%s"
+%s
 	set taskList to to dos of a
 	set output to ""
 	repeat with t in taskList
@@ -246,7 +248,7 @@ end tell`, EscapeString(project))
 		set output to output & taskId & tab & taskName & tab & taskNotes & tab & (taskStatus as string) & tab & projName & tab & areaName & tab & tagList & tab & dueVal & tab & createdVal & linefeed
 	end repeat
 	return output
-end tell`, EscapeString(area))
+end tell`, findScript)
 
 	case tag != "":
 		script = fmt.Sprintf(`tell application "Things3"
@@ -355,7 +357,7 @@ func CreateTask(req models.CreateTaskRequest) (*models.Task, error) {
 	// If a project is specified, create the task inside that project.
 	if req.Project != "" {
 		scriptParts = append(scriptParts,
-			fmt.Sprintf(`	set proj to first project whose name is "%s"`, EscapeString(req.Project)),
+			FindByNameScript("project", "proj", req.Project),
 			fmt.Sprintf(`	set newTask to make new to do in proj with properties {%s}`, props),
 		)
 	} else {
@@ -418,7 +420,8 @@ func CreateTask(req models.CreateTaskRequest) (*models.Task, error) {
 	// Move to area if specified (and no project given, since project takes precedence).
 	if req.Area != "" && req.Project == "" {
 		scriptParts = append(scriptParts,
-			fmt.Sprintf(`	set area of newTask to first area whose name is "%s"`, EscapeString(req.Area)),
+			FindByNameScript("area", "targetArea", req.Area),
+			`	set area of newTask to targetArea`,
 		)
 	}
 
@@ -516,13 +519,12 @@ func UpdateTask(id string, req models.UpdateTaskRequest) (*models.Task, error) {
 	}
 	if req.Project != nil {
 		if *req.Project == "" {
-			// Clear the project assignment by moving to Inbox.
 			scriptParts = append(scriptParts,
 				`	move t to list "Inbox"`,
 			)
 		} else {
 			scriptParts = append(scriptParts,
-				fmt.Sprintf(`	set proj to first project whose name is "%s"`, EscapeString(*req.Project)),
+				FindByNameScript("project", "proj", *req.Project),
 				`	move t to proj`,
 			)
 		}

@@ -40,6 +40,29 @@ func EscapeString(s string) string {
 	return s
 }
 
+// FindByNameScript returns an AppleScript snippet that finds an object by name
+// using iteration with trimming. Things 3 adds trailing spaces to names, and
+// the `whose` clause does not work reliably for areas and projects.
+// `class` is "area" or "project", `varName` is the variable to assign.
+func FindByNameScript(class, varName, nameValue string) string {
+	escaped := EscapeString(nameValue)
+	return fmt.Sprintf(`	set %s to missing value
+	repeat with _item in %ss
+		if (name of _item) starts with "%s" then
+			set trimmedName to name of _item
+			-- trim trailing spaces
+			repeat while trimmedName ends with " "
+				set trimmedName to text 1 thru -2 of trimmedName
+			end repeat
+			if trimmedName is "%s" then
+				set %s to _item
+				exit repeat
+			end if
+		end if
+	end repeat
+	if %s is missing value then error "Cannot find %s named \"%s\""`, varName, class, escaped, escaped, varName, varName, class, escaped)
+}
+
 // IsThings3Running checks if Things 3 is currently running.
 func IsThings3Running() bool {
 	out, err := exec.Command("osascript", "-e",

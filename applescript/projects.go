@@ -123,7 +123,8 @@ func CreateProject(req models.CreateProjectRequest) (*models.Project, error) {
 	// Assign to area if specified.
 	if req.Area != "" {
 		scriptParts = append(scriptParts,
-			fmt.Sprintf(`	set area of newProj to first area whose name is "%s"`, EscapeString(req.Area)),
+			FindByNameScript("area", "targetArea", req.Area),
+			`	set area of newProj to targetArea`,
 		)
 	}
 
@@ -195,7 +196,8 @@ func UpdateProject(id string, req models.UpdateProjectRequest) (*models.Project,
 			)
 		} else {
 			scriptParts = append(scriptParts,
-				fmt.Sprintf(`	set area of p to first area whose name is "%s"`, EscapeString(*req.Area)),
+				FindByNameScript("area", "targetArea", *req.Area),
+				`	set area of p to targetArea`,
 			)
 		}
 	}
